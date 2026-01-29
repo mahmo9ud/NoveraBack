@@ -154,7 +154,7 @@ class WishList(models.Model):
     products = models.ManyToManyField(Product,related_name='wishlists',blank=True)
 
     def __str__(self):
-        return self.customer.username
+        return self.customer.full_name
 
 
 
@@ -229,7 +229,7 @@ class Payment(models.Model):
     transaction_id = models.CharField(max_length=100, null=True, unique=True)
 
     def __str__(self):
-        return self.customer.username if self.customer else "Guest Cart" 
+        return self.customer.full_name if self.customer else "Guest Cart" 
 
 
 
@@ -243,7 +243,7 @@ class Cart(models.Model):
         return sum(item.subtotal for item in self.items.all())
 
     def __str__(self):
-        return self.customer.username if self.customer else "Guest Cart"
+        return self.customer.full_name if self.customer else "Guest Cart"
 
 
 

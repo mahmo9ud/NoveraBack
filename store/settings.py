@@ -97,11 +97,18 @@ DATABASES = {
     )
 }
 
-
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny', # Global default, strictly override in views
+    ),
+}
 
 SIMPLE_JWT = {
     # Token life span
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),  # Short life for security
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=50),  # Short life for security
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),  # Longer life for convenience
 
     # Other useful settings

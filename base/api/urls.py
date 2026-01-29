@@ -12,15 +12,17 @@ urlpatterns = [
     path('auth/logout/',views.logout),
 
     # # Product
-    # path('products/',views.get_all_products),
+    path('products/',views.get_all_products),
+    path('products/<str:pk>/',views.get_product_detail),
+    
     # path('products/get/',views.get_product_info),
     
     # # Cart
-    # path('cart/add/',views.add_item_to_cart),
-    # path('cart/remove/',views.remove_item_from_cart),
-    # path('cart/edit/',views.edit_cart),
-    # path('cart/items/',views.show_cart_items),
-    # path('cart/clear/',views.clear_cart),
+    path('cart/', views.get_cart, name='get_cart'),
+    path('cart/add/', views.add_to_cart, name='add_to_cart'),
+    path('cart/update/<int:item_id>/', views.update_cart_item, name='update_cart_item'),
+    path('cart/remove/<int:item_id>/', views.remove_from_cart, name='remove_from_cart'),
+    path('cart/clear/', views.clear_cart, name='clear_cart'),
 
     # # Order
     # path('order/add/',views.place_order),
