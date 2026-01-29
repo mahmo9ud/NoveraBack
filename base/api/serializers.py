@@ -78,3 +78,53 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Cart
         fields = ['id', 'items', 'total_price', 'created_at']
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    variant_name = serializers.CharField(source='variant.product.name', read_only=True)
+    
+    class Meta:
+        model = models.OrderItem
+        fields = ['variant_name', 'quantity', 'price', 'subtotal']
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = models.Order
+        fields = ['id', 'status', 'total_price', 'created_at', 'items', 
+                  'full_name', 'full_address', 'phone_number', 'country']
+        read_only_fields = ['id', 'status', 'total_price', 'created_at', 'items']
+
+class CreateOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Order
+        fields = ['full_name', 'full_address', 'phone_number', 'country', 'order_notes']
+
+class ReviewSerializer(serializers.ModelSerializer):
+    customer_name = serializers.CharField(source='customer.full_name', read_only=True)
+
+    class Meta:
+        model = models.Review
+        fields = ['id', 'customer_name', 'rating', 'comment', 'created_at']
+
+class CreateReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Review
+        fields = ['product', 'rating', 'comment']
+
+    def validate(self, data):
+        # Unique check is enforced at DB level, but good to validate here too
+        request = self.context.get('request')
+        if models.Review.objects.filter(customer=request.user, product=data['product']).exists():
+            raise serializers.ValidationError("You have already reviewed this product.")
+        return data
+
+class WishlistSerializer(serializers.ModelSerializer):
+    # We reuse the list serializer so the wishlist looks just like the shop page
+    products = GetAllProductListSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = models.WishList
+        fields = ['products']
+

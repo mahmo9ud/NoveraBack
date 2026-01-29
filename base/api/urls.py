@@ -25,17 +25,15 @@ urlpatterns = [
     path('cart/clear/', views.clear_cart, name='clear_cart'),
 
     # # Order
-    # path('order/add/',views.place_order),
-    # path('order/cancel/',views.cancel_order),
+    path('orders/place/', views.place_order, name='place_order'),
+    path('orders/history/', views.get_my_orders, name='my_orders'),
 
     # # Wishlist
-    # path('wishlist/add/',views.add_item_to_wishlist),
-    # path('wishlist/remove/',views.remove_item_from_wishlist),
-    # path('wishlist/items/',views.show_wishlist_items),
+    path('wishlist/', views.get_wishlist, name='get_wishlist'),
+    path('wishlist/toggle/', views.toggle_wishlist, name='toggle_wishlist'),
 
-    # # Review
-    # path('reviews/recent/',views.get_recent_reviews),
-    # path('reviews/add/',views.add_review),
+    path('reviews/add/', views.add_review, name='add_review'),
+    path('products/<str:product_id>/reviews/', views.get_product_reviews, name='product_reviews'),
 
     # # Payment (Stripe)
     # path('payment/create-checkout-session/',views.create_checkout_session),

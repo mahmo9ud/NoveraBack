@@ -237,7 +237,166 @@ def clear_cart(request):
     return Response({"message": "All items removed from cart"}, 
         status=status.HTTP_204_NO_CONTENT)
 
-
-
 #############################
 
+
+###### Orders
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def place_order(request):
+    """
+    Converts the current user's Cart into an Order.
+    Expects payload: { "full_name": "...", "full_address": "...", ... }
+    """
+    # 1. Get the Cart
+    cart = get_object_or_404(models.Cart, customer=request.user)
+    if not cart.items.exists():
+        return Response({"error": "Cart is empty"}, status=400)
+
+    # 2. Validate Input Data (Shipping info)
+    serializer = serializers.CreateOrderSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    # 3. Create the Order
+    order = models.Order.objects.create(
+        customer=request.user,
+        full_name=serializer.validated_data['full_name'],
+        full_address=serializer.validated_data['full_address'],
+        phone_number=serializer.validated_data.get('phone_number'),
+        country=serializer.validated_data.get('country'),
+        order_notes=serializer.validated_data.get('order_notes'),
+        status='pending'
+    )
+
+    # 4. Move items from Cart -> Order
+    # We loop through items to check stock and create OrderItems
+    for item in cart.items.select_related('variant'):
+        variant = item.variant
+        
+        # FINAL STOCK CHECK
+        if variant.stock < item.quantity:
+            # Rollback transaction automatically due to exception or manual error
+            # But here we just return error (transaction.atomic will rollback if we raise exception)
+            raise ValueError(f"Product {variant.product.name} is out of stock.")
+
+        # Create Order Item
+        models.OrderItem.objects.create(
+            order=order,
+            variant=variant,
+            quantity=item.quantity,
+            price=item.price # Lock in the price at time of purchase
+        )
+
+        # Deduct Stock
+        variant.stock -= item.quantity
+        variant.save()
+
+    # 5. Clear Cart
+    cart.items.all().delete()
+    
+    # 6. Return the new Order ID (Frontend can redirect to Payment or Success page)
+    return Response({"message": "Order placed successfully", "order_id": order.id}, status=201)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_my_orders(request):
+    """List all past orders for the logged-in user (Optimized)."""
+    
+    items_prefetch = Prefetch(
+        'items', 
+        queryset=models.OrderItem.objects.select_related('variant__product')
+    )
+
+    # 2. Main Query
+    orders = models.Order.objects.filter(customer=request.user)\
+        .order_by('-created_at')\
+        .prefetch_related(items_prefetch) # <--- This magic line fixes the N+1
+
+    serializer = serializers.OrderSerializer(orders, many=True)
+    return Response(serializer.data)
+
+################
+
+
+############################# Reviews
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_review(request):
+    """
+    User adds a review. 
+    Expects: { "product": 1, "rating": 5, "comment": "Great!" }
+    """
+    serializer = serializers.CreateReviewSerializer(
+        data=request.data, 
+        context={'request': request}
+    )
+    
+    if serializer.is_valid():
+        try:
+            serializer.save(customer=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except IntegrityError:
+            return Response({"error": "You have already reviewed this product."}, status=400)
+            
+    return Response(serializer.errors, status=400)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_product_reviews(request, product_id):
+    """Get all reviews for a specific product."""
+    reviews = models.Review.objects.filter(product_id=product_id).select_related('customer')
+    serializer = serializers.ReviewSerializer(reviews, many=True)
+    return Response(serializer.data)
+
+
+############################# Wishlist
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_wishlist(request):
+    """
+    Get current user's wishlist.
+    Optimized: Prefetches products -> variants -> images for the cards.
+    """
+    try:
+        # We need to prefetch the same things GetAllProductListSerializer needs
+        # (variants, lowest price, images, etc)
+        wishlist = models.WishList.objects.prefetch_related(
+            Prefetch('products', queryset=models.Product.objects.annotate(
+                lowest_price=Min('variants__price'),
+                average_rating=Avg('reviews__rating'),
+                review_count=Count('reviews')
+            ).prefetch_related(
+                Prefetch('variants', queryset=models.ProductVariant.objects.prefetch_related('images'))
+            ))
+        ).get(customer=request.user)
+        
+        serializer = serializers.WishlistSerializer(wishlist)
+        return Response(serializer.data)
+        
+    except models.WishList.DoesNotExist:
+        # Return empty structure if no wishlist exists yet
+        return Response({"products": []})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_wishlist(request):
+    """
+    Add or Remove item from wishlist. Acts as a toggle.
+    Expects: { "product_id": 5 }
+    """
+    product_id = request.data.get('product_id')
+    product = get_object_or_404(models.Product, id=product_id)
+    
+    wishlist, created = models.WishList.objects.get_or_create(customer=request.user)
+    
+    if product in wishlist.products.all():
+        wishlist.products.remove(product)
+        return Response({"message": "Removed from wishlist", "added": False})
+    else:
+        wishlist.products.add(product)
+        return Response({"message": "Added to wishlist", "added": True})
